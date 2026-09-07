@@ -1,6 +1,21 @@
 # AI 家装项目 · ai-renovate
 
-正式项目仓库，与 demo（`renovate-demo/`、`pano-demo/`）平级。
+正式项目仓库。AI 驱动的家装效果图生成与全景浏览平台，支持户型图上传、风格化生成、图像超分、全景图浏览与对比。
+
+## 技术选型
+
+| 层 | 选型 | 说明 |
+|---|---|---|
+| 后端框架 | FastAPI | 异步 Web 框架，自带 OpenAPI 文档 |
+| AI 编排 | Pydantic AI | 类型安全的 Agent 编排框架 |
+| 数据库 | SQLite + SQLAlchemy | 轻量级，零运维 |
+| 前端框架 | Vue 3 + Vite | SPA 单页应用 |
+| UI 组件库 | Vant 4 | 移动端优先的组件库 |
+| 状态管理 | Pinia | Vue 3 官方推荐 |
+| 全景浏览 | Photo Sphere Viewer | 360° 全景图查看 |
+| 部署 | Docker 多服务 | backend + frontend + nginx 编排 |
+| 反向代理 | Nginx | 静态托管 + API 转发 |
+| CI/CD | GitHub Actions | 自动测试 + Docker 构建 |
 
 ## 目录结构
 
@@ -33,19 +48,25 @@ ai-renovate/
 │   │   └── services/           # 业务逻辑（生图、超分、切片等）
 │   └── tests/
 │
-└── frontend/                   # 前端（Gradio 生成界面 / 静态页面）
-    └── Dockerfile
+└── frontend/                   # Vue 3 + Vite 前端
+    ├── Dockerfile              # 多阶段构建（node build → nginx 托管）
+    ├── nginx.conf              # Nginx 配置（静态 + API 反代）
+    ├── package.json
+    ├── vite.config.js
+    └── src/
+        ├── main.js
+        ├── App.vue
+        ├── router/             # Vue Router 路由
+        ├── stores/             # Pinia 状态管理
+        ├── api/                # Axios 封装的 HTTP 客户端
+        ├── views/              # 页面组件
+        │   ├── GenerateView    # 效果图生成
+        │   ├── PanoView        # 全景图浏览
+        │   ├── CompareView     # 方案对比
+        │   ├── HistoryView     # 历史记录
+        │   └── LoginView       # 登录
+        └── assets/
 ```
-
-## 已确定的技术选型
-
-| 层 | 选型 | 状态 |
-|---|---|---|
-| 后端框架 | FastAPI | ✅ 确定 |
-| AI 编排 | Pydantic AI | ✅ 确定 |
-| 数据库 | SQLite | ✅ 确定 |
-| 部署 | Docker 多服务 | ✅ 确定 |
-| 反向代理 | Nginx | ✅ 确定 |
 
 ## 待定（推荐但未确认，不进代码）
 
@@ -55,7 +76,6 @@ ai-renovate/
 | 结构提取 | Depth Anything + M-LSD | ControlNet 配套，CPU 可跑 |
 | 图像超分 | 阿里云超分 API | 零运维，¥0.06/张 |
 | 图片存储 | 腾讯云 COS + CDN | 不存本地 |
-| 全景浏览 | Pannellum | 开源 MIT |
 
 > 以上推荐项确认后，逐步加入对应 service 模块和 Dockerfile。
 
@@ -71,7 +91,7 @@ python scripts/setup_dev.py
 
 > 脚本会自动：创建虚拟环境 → 安装锁定依赖 → 创建 .env → 运行测试验证
 
-### 本地开发（不用 Docker）
+### 后端开发
 
 ```powershell
 cd ai-renovate\backend
@@ -83,14 +103,35 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 > ⚠️ 使用 `requirements.lock` 而非 `pyproject.toml` 安装，确保版本完全一致
+>
+> API 文档：http://127.0.0.1:8000/docs
 
-### Docker 开发
+### 前端开发
+
+```powershell
+cd ai-renovate\frontend
+npm install
+npm run dev
+```
+
+> 前端开发服务器：http://localhost:5173
+>
+> 前端会通过 Vite 代理将 `/api` 请求转发到后端 `localhost:8000`
+
+### Docker 一键启动（全部服务）
 
 ```powershell
 cd ai-renovate
-docker compose up -d
-# backend → http://localhost:8000
-# frontend → http://localhost:7860
+docker compose up -d --build
+# backend  → http://localhost:8000
+# frontend → http://localhost:80（Nginx 托管）
+```
+
+单独重建某个服务：
+
+```powershell
+docker compose build backend && docker compose up -d backend
+docker compose build frontend && docker compose up -d frontend
 ```
 
 ## 协作流程
@@ -102,6 +143,12 @@ docker compose up -d
 2. 点击 **Add people** → 输入对方 GitHub 用户名
 3. 权限选 **Write** → 发送邀请
 4. 对方邮箱收到邀请，接受后即可推送代码
+
+或用命令行快速邀请：
+
+```powershell
+gh api repos/MacTavishSoap/ai-renovate/collaborators/<对方用户名> -X PUT -f permission=push
+```
 
 ### 日常开发（通过 Pull Request）
 
@@ -121,18 +168,56 @@ git push -u origin feature/你的功能名
 # 5. 至少1人 review 通过后合并 → CI/CD 自动跑
 ```
 
+> **分支保护规则**：`main` 分支受保护，普通协作者不能直接 push，必须走 PR + 1人审批。Owner 可以 bypass 但建议也走 PR 流程。
+
+### 环境统一
+
+虚拟环境（venv / node_modules）**不提交到仓库**，通过以下文件保证所有协作者环境一致：
+
+| 文件 | 作用 |
+|------|------|
+| `backend/.python-version` | 固定 Python 3.12.7 |
+| `backend/requirements.lock` | 🔒 锁定所有 Python 依赖精确版本（100+ 包） |
+| `frontend/package-lock.json` | 🔒 锁定所有前端依赖精确版本 |
+| `scripts/setup_dev.py` | 一键搭建脚本 |
+
+朋友拉下来后只需：
+
+```powershell
+python scripts/setup_dev.py   # 后端环境一键搞定
+cd frontend && npm install     # 前端环境
+```
+
 ### 环境更新（依赖变化时）
 
-当 `pyproject.toml` 增删依赖后，重新生成锁定文件：
+后端加了新依赖：
 
 ```powershell
 cd backend
 venv\Scripts\activate
 pip install -e ".[dev]"          # 安装新依赖
 pip freeze > requirements.lock   # 重新锁定
-git add requirements.lock
-git commit -m "chore: 更新依赖锁定"
+git add requirements.lock pyproject.toml
+git commit -m "chore: 更新后端依赖锁定"
 ```
+
+前端加了新依赖：
+
+```powershell
+cd frontend
+npm install 新包名
+git add package.json package-lock.json
+git commit -m "chore: 更新前端依赖"
+```
+
+## CI/CD
+
+| Workflow | 触发条件 | 作用 |
+|----------|---------|------|
+| `ci.yml` | push/PR 到 main | 编译检查 + pytest 测试 |
+| `cd-build.yml` | push 到 main / 打 tag | 构建 backend + frontend Docker 镜像 |
+
+CI 必须通过才能合并 PR。CD 会自动构建 Docker 镜像，后续如需推送到镜像仓库（Docker Hub / 阿里云 ACR），在仓库 Settings → Secrets 配置凭据后取消注释 `cd-build.yml` 中的推送步骤即可。
 
 ## 设计原则
 
