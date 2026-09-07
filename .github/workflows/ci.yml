@@ -21,13 +21,15 @@ jobs:
       - name: 📥 Checkout 代码
         uses: actions/checkout@v4
 
-      - name: 🐍 安装 uv (极速 Python 包管理器)
-        uses: astral-sh/setup-uv@v3
+      - name: 🐍 安装 Python
+        uses: actions/setup-python@v5
         with:
-          enable-cache: true
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/pyproject.toml
 
       - name: 📦 安装依赖
-        run: uv pip install --system -e ".[dev]"
+        run: pip install -e ".[dev]"
 
       - name: 🔍 代码检查（编译验证）
         run: python -m py_compile $(find app -name "*.py") && echo "✅ 编译通过"
