@@ -1,8 +1,4 @@
-﻿:root {
-  --van-primary-color: #1989fa;
-}
-
-* {
+﻿* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -10,12 +6,54 @@
 
 html,
 body {
-  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: #f7f8fa;
-  color: #323233;
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
   min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Vant 全局微调 */
+.van-tabbar-item--active {
+  color: var(--accent) !important;
+}
+
+.van-nav-bar {
+  border-bottom: 1px solid var(--divider);
+}
+
+.van-nav-bar__title {
+  font-weight: 600;
+}
+
+/* 触摸目标保证 */
+.van-button {
+  min-height: var(--touch-target);
+}
+
+/* focus-visible 统一 */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -5,6 +5,7 @@ import 'vant/lib/index.css'
 
 import App from './App.vue'
 import router from './router'
+import './tokens.css'
 import './style.css'
 
 const app = createApp(App)

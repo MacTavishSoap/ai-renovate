@@ -3,7 +3,9 @@
 两张表：users + generations（按 TECH_SPEC.md 设计）
 """
 
+import os
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
@@ -43,9 +45,17 @@ class Generation(Base):
     user = relationship("User", back_populates="generations")
 
 
-# 引擎（SQLite 文件路径从配置读取）
+# 引擎 — 确保数据库目录存在，避免 SQLite "unable to open database file"
+_db_url = settings.database_url
+if _db_url.startswith("sqlite:///") and not _db_url.startswith("sqlite:////"):
+    _db_path = Path(_db_url.replace("sqlite:///", "", 1))
+    if not _db_path.is_absolute():
+        _db_path = Path(__file__).resolve().parent.parent / _db_path
+    _db_path.parent.mkdir(parents=True, exist_ok=True)
+    _db_url = f"sqlite:///{_db_path.as_posix()}"
+
 engine = create_engine(
-    settings.database_url.replace("sqlite:///", "sqlite:///"),
+    _db_url,
     connect_args={"check_same_thread": False},
 )
 

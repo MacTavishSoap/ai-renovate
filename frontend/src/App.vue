@@ -11,7 +11,11 @@ const showTabbar = computed(() => !['pano', 'login'].includes(route.name))
 
 <template>
   <div class="app-container">
-    <RouterView />
+    <RouterView v-slot="{ Component }">
+      <transition name="fade" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </RouterView>
     <Tabbar v-if="showTabbar" route>
       <TabbarItem to="/generate" icon="photo-o">生成</TabbarItem>
       <TabbarItem to="/history" icon="clock-o">历史</TabbarItem>
@@ -22,6 +26,16 @@ const showTabbar = computed(() => !['pano', 'login'].includes(route.name))
 <style scoped>
 .app-container {
   min-height: 100vh;
-  padding-bottom: 50px; /* Tabbar 高度 */
+  padding-bottom: var(--van-tabbar-height);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -1,9 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
-import { showNotify } from 'vant'
 import { Viewer } from 'photo-sphere-viewer'
-import { VirtualTourPlugin } from 'photo-sphere-viewer/dist/plugins/virtual-tour'
 import 'photo-sphere-viewer/dist/photo-sphere-viewer.css'
 import { getGeneration } from '@/api/generations'
 
@@ -11,79 +9,63 @@ const route = useRoute()
 const viewerContainer = ref(null)
 const viewer = shallowRef(null)
 
-// 当前生成任务数据
 const generation = ref(null)
-// 场景列表（同项目的其他全景图）
 const scenes = ref([])
 const currentScene = ref(0)
+const loading = ref(true)
 
-// 占位全景图（开发期用 pano-demo 的测试图）
-const PLACEHOLDER_PANO = 'https://photo-sphere-viewer-data.netlify.app/assets/sphere.jpg'
+// 开发期占位全景图
+const PLACEHOLDER_PANOS = [
+  'https://photo-sphere-viewer-data.netlify.app/assets/sphere.jpg',
+  'https://photo-sphere-viewer-data.netlify.app/assets/sphere-cropped.jpg',
+]
+const PLACEHOLDER_NAMES = ['客厅', '卧室']
 
 async function loadData() {
   const id = route.params.id
   try {
     generation.value = await getGeneration(id)
-    // TODO: 如果 generation 有 pano_url 用真实的，否则用占位图
-    // 当前开发期用占位全景图
-    scenes.value = [
-      { id: 'scene-1', name: '客厅', panorama: PLACEHOLDER_PANO },
-    ]
+    scenes.value = PLACEHOLDER_PANOS.map((url, i) => ({
+      id: `scene-${i}`,
+      name: PLACEHOLDER_NAMES[i] || `场景${i + 1}`,
+      panorama: url,
+    }))
   } catch {
-    // 开发期：API 可能没启动，用占位数据
-    scenes.value = [
-      { id: 'scene-1', name: '客厅', panorama: PLACEHOLDER_PANO },
-      { id: 'scene-2', name: '卧室', panorama: 'https://photo-sphere-viewer-data.netlify.app/assets/sphere-cropped.jpg' },
-    ]
+    scenes.value = PLACEHOLDER_PANOS.map((url, i) => ({
+      id: `scene-${i}`,
+      name: PLACEHOLDER_NAMES[i] || `场景${i + 1}`,
+      panorama: url,
+    }))
   }
 }
 
 function initViewer() {
   if (!viewerContainer.value || scenes.value.length === 0) return
-
-  const nodes = scenes.value.map((s, i) => ({
-    id: s.id,
-    label: s.name,
-    panorama: s.panorama,
-    // 连接到相邻场景（环形）
-    links: scenes.value.length > 1
-      ? [{ nodeId: scenes.value[(i + 1) % scenes.value.length].id }]
-      : [],
-  }))
-
   viewer.value = new Viewer({
     container: viewerContainer.value,
+    panorama: scenes.value[0].panorama,
     defaultZoomLvl: 50,
-    navbar: ['zoom', 'move', 'fullscreen', 'caption'],
-    plugins: [
-      [
-        VirtualTourPlugin,
-        {
-          positionMode: 'manual',
-          renderMode: '3d',
-          nodes,
-          startNodeId: nodes[0].id,
-        },
-      ],
-    ],
+    navbar: ['zoom', 'move', 'fullscreen'],
+    loadingTxt: '加载全景图...',
+    size: { width: '100%', height: '100%' },
   })
-
-  // 切换场景时更新当前索引
-  viewer.value.addEventListener('node-changed', (e) => {
-    const idx = scenes.value.findIndex((s) => s.id === e.node.id)
-    if (idx >= 0) currentScene.value = idx
-  })
+  loading.value = false
 }
 
 function switchScene(index) {
-  const scene = scenes.value[index]
-  if (!scene || !viewer.value) return
-  const plugin = viewer.value.getPlugin(VirtualTourPlugin)
-  plugin.setCurrentNode(scene.id)
+  if (index === currentScene.value || !viewer.value) return
+  currentScene.value = index
+  viewer.value.setPanorama(scenes.value[index].panorama, {
+    transition: { speed: 1500 },
+  })
 }
 
 function goBack() {
   history.back()
+}
+
+function shareLink() {
+  navigator.clipboard?.writeText(window.location.href)
 }
 
 onMounted(async () => {
@@ -101,32 +83,41 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="pano-page">
-    <!-- 全景容器 -->
     <div ref="viewerContainer" class="viewer-container"></div>
 
-    <!-- 顶部栏 -->
-    <div class="pano-header">
-      <van-icon name="arrow-left" size="20" color="#fff" @click="goBack" />
-      <span class="pano-title">
-        {{ generation?.type === 'pano' ? '全景图' : '全景浏览' }}
-        {{ scenes.length > 1 ? `· ${scenes[currentScene]?.name || ''}` : '' }}
-      </span>
-      <van-icon name="share-o" size="20" color="#fff" />
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">正在加载全景图...</p>
     </div>
 
-    <!-- 底部场景轮播（多个场景时显示） -->
-    <div v-if="scenes.length > 1" class="scene-bar">
+    <header class="pano-header">
+      <button class="header-btn" @click="goBack" aria-label="返回">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <span class="pano-title">{{ scenes[currentScene]?.name || '全景浏览' }}</span>
+      <button class="header-btn" @click="shareLink" aria-label="分享">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      </button>
+    </header>
+
+    <nav v-if="scenes.length > 1" class="scene-bar" aria-label="场景切换">
       <div class="scene-scroll">
-        <div
+        <button
           v-for="(scene, i) in scenes"
           :key="scene.id"
-          :class="['scene-thumb', { active: i === currentScene }]"
+          :class="['scene-chip', { active: i === currentScene }]"
           @click="switchScene(i)"
         >
           {{ scene.name }}
-        </div>
+        </button>
       </div>
-    </div>
+    </nav>
   </div>
 </template>
 
@@ -134,13 +125,47 @@ onBeforeUnmount(() => {
 .pano-page {
   position: fixed;
   inset: 0;
-  background: #000;
+  background: var(--dark);
   overflow: hidden;
 }
 
 .viewer-container {
   width: 100%;
   height: 100%;
+}
+
+.viewer-container :deep(.psv-navbar) {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  background: var(--dark);
+  z-index: 5;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: var(--text-body-sm);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .pano-header {
@@ -151,17 +176,35 @@ onBeforeUnmount(() => {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  padding-top: calc(12px + env(safe-area-inset-top, 0px));
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
+  gap: var(--space-md);
+  padding: var(--space-md);
+  padding-top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
+}
+
+.header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  color: #fff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header-btn:active {
+  opacity: 0.6;
 }
 
 .pano-title {
   flex: 1;
   color: #fff;
-  font-size: 16px;
-  font-weight: 500;
+  font-size: var(--text-h3);
+  font-weight: 600;
+  text-align: center;
 }
 
 .scene-bar {
@@ -170,34 +213,53 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   z-index: 10;
-  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  padding: var(--space-md) 0 calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
 }
 
 .scene-scroll {
   display: flex;
-  gap: 8px;
+  gap: var(--space-sm);
   overflow-x: auto;
-  padding: 0 16px;
+  overflow-y: hidden;
+  padding: 0 var(--space-md);
   scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .scene-scroll::-webkit-scrollbar {
   display: none;
 }
 
-.scene-thumb {
+.scene-chip {
   flex-shrink: 0;
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
-  transition: all 0.2s;
+  height: 36px;
+  padding: 0 var(--space-md);
+  font-size: var(--text-body-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
 
-.scene-thumb.active {
-  background: #1989fa;
+.scene-chip.active {
+  background: var(--accent);
   color: #fff;
+}
+
+.scene-chip:active {
+  transform: scale(0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
 }
 </style>
