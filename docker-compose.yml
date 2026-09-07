@@ -2,8 +2,8 @@
 # 每个服务独立 build，可单独更新：
 #   docker compose build backend && docker compose up -d backend
 #
-# 当前确认的服务：backend (FastAPI + Pydantic AI)
-# 待确认后追加：frontend (Gradio), nginx (反向代理)
+# 当前确认的服务：backend (FastAPI) + frontend (Vue 3)
+# 待确认后追加：nginx (统一反向代理)
 
 services:
   # ===== 后端 API =====
@@ -28,20 +28,18 @@ services:
       timeout: 5s
       retries: 3
 
-  # ===== 前端（占位，确认后启用） =====
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: ai-renovate-frontend
-  #   ports:
-  #     - "7860:7860"
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     backend:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  # ===== 前端 (Vue 3 + Vite) =====
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ai-renovate-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
   # ===== Nginx 反向代理（确认后启用） =====
   # nginx:

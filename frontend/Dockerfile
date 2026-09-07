@@ -1,14 +1,21 @@
-# AI 家装 — 前端镜像
-# 当前是占位，后续接入 Gradio 生成界面或静态页面
-FROM python:3.12.7-slim
+# AI 家装 — 前端镜像（Vue 3 + Vite）
+# 多阶段构建：先 build 再用 nginx 托管静态文件
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir gradio>=4.44
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
+RUN npm run build
 
-EXPOSE 7860
+# ---- 生产镜像 ----
+FROM nginx:alpine
 
-# 占位启动命令，后续替换为真正的 Gradio 入口
-CMD ["python", "-c", "print('frontend placeholder — TODO: 接入 Gradio 生成界面')"]
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
