@@ -1,0 +1,62 @@
+# AI 家装项目 — 多服务编排
+# 每个服务独立 build，可单独更新：
+#   docker compose build backend && docker compose up -d backend
+#
+# 当前确认的服务：backend (FastAPI + Pydantic AI)
+# 待确认后追加：frontend (Gradio), nginx (反向代理)
+
+services:
+  # ===== 后端 API =====
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-renovate-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # SQLite 数据持久化
+      - backend-data:/app/data
+      # 开发时热更新源码（生产去掉）
+      - ./backend/app:/app/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ===== 前端（占位，确认后启用） =====
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: ai-renovate-frontend
+  #   ports:
+  #     - "7860:7860"
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     backend:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  # ===== Nginx 反向代理（确认后启用） =====
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: ai-renovate-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/certs:/etc/nginx/certs:ro
+  #   depends_on:
+  #     - backend
+  #     - frontend
+  #   restart: unless-stopped
+
+volumes:
+  backend-data:
