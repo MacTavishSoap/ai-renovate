@@ -11,6 +11,10 @@ venv/
 # 环境变量
 .env
 
+# 真实配置文件（含 API Key，不入库）
+config.json
+!config.example.json
+
 # 数据库
 *.db
 *.db-journal

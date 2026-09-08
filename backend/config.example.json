@@ -1,0 +1,73 @@
+{
+  "_comment": "AI 家装项目配置文件模板 — 复制为 config.json 填入真实值",
+
+  "image_api": {
+    "_comment": "图像生成 API（smile-ai 中转，OpenAI 兼容格式）",
+    "base_url": "https://api.smile-ai-studio.com/v1",
+    "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "gpt-image-2",
+    "default_quality": "high",
+    "default_size": "1024x1024"
+  },
+
+  "llm_api": {
+    "_comment": "LLM API（Pydantic AI Agent 用，可与图像 API 相同）",
+    "base_url": "https://api.smile-ai-studio.com/v1",
+    "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "gpt-4o-mini"
+  },
+
+  "aliyun_sms": {
+    "_comment": "阿里云短信服务凭证",
+    "access_key_id": "",
+    "access_key_secret": "",
+    "sign_name": "",
+    "template_code": ""
+  },
+
+  "aliyun_super_res": {
+    "_comment": "阿里云视觉智能超分 API 凭证。也可用环境变量 ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+    "access_key_id": "",
+    "access_key_secret": ""
+  },
+
+  "volcengine": {
+    "_comment": "火山引擎 AI MediaKit 图像画质增强。获取 API Key: https://console.volcengine.com/imp/ai-mediakit/settings",
+    "api_key": "",
+    "endpoint": "https://mediakit.cn-beijing.volces.com"
+  },
+
+  "tencent_cos": {
+    "_comment": "腾讯云对象存储（图片存储用）",
+    "secret_id": "",
+    "secret_key": "",
+    "bucket": "",
+    "region": "ap-guangzhou"
+  },
+
+  "database": {
+    "_comment": "数据库连接，默认本地 SQLite",
+    "url": "sqlite:///./data/app.db"
+  },
+
+  "super_res": {
+    "_comment": "超分开关。阿里云(--sr) / 火山引擎(--volc) 可在调用时指定",
+    "enabled": false,
+    "default_scale": 2,
+    "default_format": "jpg",
+    "default_quality": 95
+  },
+
+  "app": {
+    "_comment": "应用基础配置",
+    "env": "development",
+    "secret_key": "change-me-in-production",
+    "host": "0.0.0.0",
+    "port": 8000
+  },
+
+  "prompts": {
+    "_comment": "生图全局后缀 Prompt",
+    "global_suffix": "\n重要约束：严格保持原图的空间结构、透视角度、门窗位置和房间形状不变，只改变装修风格与软装陈设。输出照片级写实效果图，画面中不要出现任何文字和水印。 photorealistic interior photograph, professional real estate photography"
+  }
+}
