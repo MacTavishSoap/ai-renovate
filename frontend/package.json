@@ -1,7 +1,7 @@
 {
-  "name": "frontend",
+  "name": "ai-renovate-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@photo-sphere-viewer/core": "^5.15.1",
     "axios": "^1.20.0",
-    "photo-sphere-viewer": "^4.8.1",
     "pinia": "^4.0.3",
     "vant": "^4.10.2",
     "vue": "^3.5.41",

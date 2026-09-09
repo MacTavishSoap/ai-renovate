@@ -12,8 +12,8 @@
 | 前端框架 | Vue 3 + Vite | SPA 单页应用 |
 | UI 组件库 | Vant 4 | 移动端优先的组件库 |
 | 状态管理 | Pinia | Vue 3 官方推荐 |
-| 全景浏览 | Photo Sphere Viewer | 360° 全景图查看 |
-| 部署 | Docker 多服务 | backend + frontend + nginx 编排 |
+| 全景浏览 | Photo Sphere Viewer v5 | 360° 全景图查看，多分辨率按需加载 |
+| 部署 | Docker 多服务 + Makefile | backend + frontend 独立构建，统一发布 |
 | 反向代理 | Nginx | 静态托管 + API 转发 |
 | CI/CD | GitHub Actions | 自动测试 + Docker 构建 |
 
@@ -21,10 +21,12 @@
 
 ```
 ai-renovate/
-├── docker-compose.yml          # 多服务编排（backend / frontend / nginx）
+├── Makefile                   # 统一构建/发布/开发命令集
+├── docker-compose.yml          # 多服务编排（backend / frontend）
 ├── .env.example                # 环境变量模板
 ├── .gitignore
 ├── README.md                   # 本文件
+├── TECH_SPEC.md                # 技术规格 + 踩坑记录
 │
 ├── scripts/
 │   └── setup_dev.py            # 一键搭建开发环境
@@ -50,18 +52,28 @@ ai-renovate/
 │
 └── frontend/                   # Vue 3 + Vite 前端
     ├── Dockerfile              # 多阶段构建（node build → nginx 托管）
-    ├── nginx.conf              # Nginx 配置（静态 + API 反代）
+    ├── nginx.conf              # Nginx 配置（静态 + API 反代 + 全景图缓存）
     ├── package.json
+    ├── package-lock.json
     ├── vite.config.js
+    ├── public/
+    │   └── panoramas/          # 全景图资源（manifest.json + 多分辨率 JPG）
     └── src/
         ├── main.js
         ├── App.vue
+        ├── tokens.css          # 设计系统变量（色彩/间距/动效/暗色面板）
+        ├── style.css           # 全局样式
         ├── router/             # Vue Router 路由
         ├── stores/             # Pinia 状态管理
-        ├── api/                # Axios 封装的 HTTP 客户端
+        ├── api/                # HTTP 封装
+        │   ├── http.js         # Axios 实例（拦截器 + token）
+        │   ├── auth.js         # 登录/验证码
+        │   ├── generations.js  # 生成 API
+        │   └── pano.js         # 全景图 manifest 加载 + 多分辨率工具
         ├── views/              # 页面组件
+        │   ├── GalleryView     # 全景画廊（卡片网格 + 骨架屏）
+        │   ├── PanoView        # 全景浏览（PSV v5 + 多分辨率 + 侧边面板）
         │   ├── GenerateView    # 效果图生成
-        │   ├── PanoView        # 全景图浏览
         │   ├── CompareView     # 方案对比
         │   ├── HistoryView     # 历史记录
         │   └── LoginView       # 登录
@@ -120,19 +132,42 @@ npm run dev
 
 ### Docker 一键启动（全部服务）
 
-```powershell
-cd ai-renovate
-docker compose up -d --build
+```bash
+make dev          # = docker compose up -d --build
 # backend  → http://localhost:8000
-# frontend → http://localhost:80（Nginx 托管）
+# frontend → http://localhost:8080（Nginx 托管）
 ```
 
 单独重建某个服务：
 
-```powershell
-docker compose build backend && docker compose up -d backend
-docker compose build frontend && docker compose up -d frontend
+```bash
+make dev-backend     # 仅后端
+make dev-frontend    # 仅前端
 ```
+
+### Makefile 命令速查
+
+```bash
+# 开发
+make dev               # 一键启动开发环境
+make stop-dev           # 停止
+make backend-run        # 本地运行后端（不用 Docker）
+make frontend-run       # 本地运行前端（不用 Docker）
+
+# 发布镜像到仓库
+make release            # 全部发布（构建+标签+推送）
+make backend-release    # 仅后端
+make frontend-release   # 仅前端
+
+# 服务器更新（SSH 登录后在服务器执行）
+make server-update      # 拉取最新镜像 + 重启容器
+
+# CI/CD
+make ci-test            # 运行后端测试
+make ci-frontend-check  # 前端编译检查
+```
+
+> ⚠️ `make` 命令需要在 WSL / Linux 环境下执行，Windows PowerShell 没有 make
 
 ## 协作流程
 
@@ -219,9 +254,50 @@ git commit -m "chore: 更新前端依赖"
 
 CI 必须通过才能合并 PR。CD 会自动构建 Docker 镜像，后续如需推送到镜像仓库（Docker Hub / 阿里云 ACR），在仓库 Settings → Secrets 配置凭据后取消注释 `cd-build.yml` 中的推送步骤即可。
 
+## 发布与部署
+
+完整上线分两步：本机发布镜像 → 服务器拉取更新。
+
+### 1. 本机发布镜像
+
+```bash
+# 先登录腾讯云 TCR
+docker login ccr.ccs.tencentyun.com --username=<你的账号>
+
+# 发布全部（构建 + 打标签 + 推送）
+make release
+
+# 或单独发布
+make backend-release    # 仅后端
+make frontend-release   # 仅前端
+```
+
+版本号在 `Makefile` 顶部独立维护：
+
+```makefile
+BACKEND_VERSION  := v0.1.0    # 后端改了就 bump 这里
+FRONTEND_VERSION := v0.1.0    # 前端改了就 bump 这里
+```
+
+### 2. 服务器更新
+
+```bash
+# SSH 登录服务器
+ssh root@your-server-ip
+
+# 进入项目目录，拉取并重启
+cd /opt/ai-renovate
+make server-update    # = docker compose pull && docker compose up -d
+
+# 或只更新某个服务
+docker compose pull backend && docker compose up -d backend
+```
+
 ## 设计原则
 
-1. **每个服务一个 Dockerfile** — 可以单独 build、单独更新
-2. **版本迭代** — 改了 backend 就 `docker compose build backend && up -d backend`，不动 frontend
+1. **前后端独立维护** — 各自有独立版本号，`make backend-release` / `make frontend-release` 互不影响
+2. **每个服务一个 Dockerfile** — 可以单独 build、单独更新
 3. **配置走环境变量** — `.env` 文件管理所有密钥/配置，不硬编码
-4. **未确认的不落代码** — 推荐方案写在文档里，确认后才写 service + Dockerfile
+4. **全景图多分辨率** — full / mobile / thumb 三层按设备能力按需加载，manifest.json 驱动
+5. **设计系统统一** — `tokens.css` 是唯一色彩/间距/动效来源，全景暗色界面与亮色界面共享同一套变量
+6. **未确认的不落代码** — 推荐方案写在文档里，确认后才写 service + Dockerfile

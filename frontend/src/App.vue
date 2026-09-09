@@ -5,8 +5,8 @@ import { Tabbar, TabbarItem } from 'vant'
 
 const route = useRoute()
 
-// 全景浏览页不显示底部导航
-const showTabbar = computed(() => !['pano', 'login'].includes(route.name))
+// 全景浏览页 + 画廊页不显示底部导航（沉浸式体验）
+const showTabbar = computed(() => !['pano', 'pano-gallery', 'gallery', 'login'].includes(route.name))
 </script>
 
 <template>

@@ -13,6 +13,11 @@ const routes = [
     meta: { public: true },
   },
   {
+    path: '/gallery',
+    name: 'gallery',
+    component: () => import('@/views/GalleryView.vue'),
+  },
+  {
     path: '/generate',
     name: 'generate',
     component: () => import('@/views/GenerateView.vue'),
@@ -27,6 +32,11 @@ const routes = [
     name: 'pano',
     component: () => import('@/views/PanoView.vue'),
     meta: { public: true }, // 分享链接可无登录访问
+  },
+  {
+    path: '/pano',
+    name: 'pano-gallery',
+    component: () => import('@/views/GalleryView.vue'),
   },
   {
     path: '/compare/:id',
