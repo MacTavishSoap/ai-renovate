@@ -55,6 +55,34 @@ export function getEffectThumbUrl(pano) {
   return `/panoramas/${name}_thumb.jpg`
 }
 
+/** 实拍图列表 (photos 数组，每个 {file, label}) */
+export function getPhotos(pano) {
+  return pano.photos || []
+}
+
+export function getPhotoUrl(file) {
+  return `/panoramas/${file}`
+}
+
+export function getPhotoThumbUrl(file) {
+  const name = file.replace(/\.\w+$/, '')
+  return `/panoramas/${name}_thumb.jpg`
+}
+
+/** 3D 效果图列表 (effects 数组，每个 {file, label}) */
+export function getEffects(pano) {
+  return pano.effects || []
+}
+
+export function getEffectItemUrl(file) {
+  return `/panoramas/${file}`
+}
+
+export function getEffectItemThumbUrl(file) {
+  const name = file.replace(/\.\w+$/, '')
+  return `/panoramas/${name}_thumb.jpg`
+}
+
 /** 户型图 URL（可选，不一定有） */
 export function getFloorplanUrl(pano) {
   if (!pano.floorplan) return null

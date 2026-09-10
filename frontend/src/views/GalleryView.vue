@@ -1,13 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { loadManifest, getThumbUrl, getEffectThumbUrl, getFloorplanThumbUrl } from '@/api/pano'
+import { loadManifest, getThumbUrl, getPhotos, getEffects } from '@/api/pano'
 
 const router = useRouter()
 const list = ref([])
 const loading = ref(true)
 const error = ref(false)
-const showFloorplan = ref(null)
 
 onMounted(async () => {
   try {
@@ -21,11 +20,6 @@ onMounted(async () => {
 
 function open(id) {
   router.push(`/pano/${id}`)
-}
-
-function toggleFloorplan(id, e) {
-  e.stopPropagation()
-  showFloorplan.value = showFloorplan.value === id ? null : id
 }
 </script>
 
@@ -92,30 +86,17 @@ function toggleFloorplan(id, e) {
           <div v-if="pano.meta" class="meta">{{ pano.meta }}</div>
         </div>
 
-        <!-- 附属图: 效果图 + 户型图 (有的话才显示) -->
-        <div v-if="pano.effectImage || pano.floorplan" class="extras">
-          <!-- 效果图 -->
-          <div v-if="pano.effectImage && getEffectThumbUrl(pano)" class="extra-item">
-            <img :src="getEffectThumbUrl(pano)" alt="效果图" loading="lazy" class="extra-thumb" />
-            <span class="extra-label">效果图</span>
-          </div>
-          <!-- 户型图 (可选, 点击展开大图) -->
-          <button
-            v-if="pano.floorplan && getFloorplanThumbUrl(pano)"
-            class="extra-item extra-btn"
-            @click="toggleFloorplan(pano.id, $event)"
-          >
-            <img :src="getFloorplanThumbUrl(pano)" alt="户型图" loading="lazy" class="extra-thumb" />
-            <span class="extra-label">户型图</span>
-          </button>
+        <!-- 附属图: 实拍图 + 3D效果图 (有的话才显示) -->
+        <div v-if="getPhotos(pano).length || getEffects(pano).length" class="extras">
+          <span v-if="getPhotos(pano).length" class="extra-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+            实拍 {{ getPhotos(pano).length }}
+          </span>
+          <span v-if="getEffects(pano).length" class="extra-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></svg>
+            3D {{ getEffects(pano).length }}
+          </span>
         </div>
-
-        <!-- 户型图展开 -->
-        <Transition name="expand">
-          <div v-if="showFloorplan === pano.id && pano.floorplan" class="floorplan-expand" @click.stop>
-            <img :src="getFloorplanThumbUrl(pano)" alt="户型图大图" class="floorplan-large" />
-          </div>
-        </Transition>
       </div>
     </div>
   </div>
@@ -186,30 +167,13 @@ function toggleFloorplan(id, e) {
   display: flex; gap: var(--space-sm);
   padding: 0 var(--space-md) var(--space-md);
 }
-.extra-item {
-  position: relative; flex: 1;
-  border-radius: var(--radius-md); overflow: hidden;
-  background: #f0eee9; border: none; padding: 0; cursor: pointer;
-  font-family: inherit;
+.extra-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; border-radius: var(--radius-full);
+  background: #f0eee9; color: var(--text-secondary, #666);
+  font-size: 12px; font-weight: 500;
 }
-.extra-item:active { transform: scale(0.97); }
-.extra-thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
-.extra-label {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 16px 6px 3px; text-align: center;
-  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
-  color: #fff; font-size: 11px; font-weight: 500;
-}
-.extra-btn { display: block; text-align: left; }
-
-/* 户型图展开 */
-.floorplan-expand {
-  padding: 0 var(--space-md) var(--space-md);
-}
-.floorplan-large {
-  width: 100%; border-radius: var(--radius-md);
-  border: 1px solid var(--divider);
-}
+.extra-badge svg { opacity: 0.6; }
 
 /* skeleton */
 .skeleton { pointer-events: none; }

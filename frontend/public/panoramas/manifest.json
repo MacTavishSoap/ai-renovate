@@ -3,7 +3,7 @@
     "id": "livingroom",
     "title": "客厅",
     "meta": "360° 全景漫游",
-    "badge": "360°",
+    "badge": "8K",
     "file": "livingroom.jpg",
     "levels": {
       "thumb": "livingroom_thumb.jpg",
@@ -16,14 +16,44 @@
     "defaultYaw": 0,
     "defaultPitch": 0,
     "sphereCorrection": {},
-    "effectImage": "effect.jpg",
-    "floorplan": "floorplan.jpg"
+    "photos": [
+      {
+        "file": "livingroom_photo1.jpg",
+        "label": "实拍-厨房"
+      },
+      {
+        "file": "livingroom_photo3.jpg",
+        "label": "实拍图"
+      }
+    ],
+    "effects": [
+      {
+        "file": "effect_front.jpg",
+        "label": "正面视图"
+      },
+      {
+        "file": "effect_left.jpg",
+        "label": "左侧90°"
+      },
+      {
+        "file": "effect_right.jpg",
+        "label": "右侧90°"
+      },
+      {
+        "file": "effect_right180.jpg",
+        "label": "右侧180°"
+      },
+      {
+        "file": "effect_reference.jpg",
+        "label": "参考示例"
+      }
+    ]
   },
   {
     "id": "bedroom",
     "title": "卧室",
     "meta": "360° 全景漫游",
-    "badge": "360°",
+    "badge": "8K",
     "file": "bedroom.jpg",
     "levels": {
       "thumb": "bedroom_thumb.jpg",
@@ -35,36 +65,76 @@
     "defaultZoomLvl": 50,
     "defaultYaw": 0,
     "defaultPitch": 0,
-    "sphereCorrection": {}
+    "sphereCorrection": {},
+    "photos": [
+      {
+        "file": "bedroom_photo5.jpg",
+        "label": "实拍1"
+      },
+      {
+        "file": "bedroom_photo6.jpg",
+        "label": "实拍2"
+      }
+    ]
   },
   {
-    "id": "kitchen",
-    "title": "厨房",
+    "id": "children",
+    "title": "子女房",
     "meta": "360° 全景漫游",
-    "badge": "360°",
-    "file": "kitchen.jpg",
+    "badge": "8K",
+    "file": "children.jpg",
     "levels": {
-      "thumb": "kitchen_thumb.jpg",
-      "mobile": "kitchen_mobile.jpg",
-      "full": "kitchen.jpg"
+      "thumb": "children_thumb.jpg",
+      "mobile": "children_mobile.jpg",
+      "full": "children.jpg"
     },
     "minFov": 40,
     "maxFov": 75,
     "defaultZoomLvl": 50,
     "defaultYaw": 0,
     "defaultPitch": 0,
-    "sphereCorrection": {}
+    "sphereCorrection": {},
+    "photos": [
+      {
+        "file": "children_photo4.jpg",
+        "label": "实拍1"
+      }
+    ]
   },
   {
-    "id": "full",
-    "title": "全景8K",
+    "id": "secondbed",
+    "title": "次卧",
     "meta": "360° 全景漫游",
     "badge": "8K",
-    "file": "full.jpg",
+    "file": "secondbed.jpg",
     "levels": {
-      "thumb": "full_thumb.jpg",
-      "mobile": "full_mobile.jpg",
-      "full": "full.jpg"
+      "thumb": "secondbed_thumb.jpg",
+      "mobile": "secondbed_mobile.jpg",
+      "full": "secondbed.jpg"
+    },
+    "minFov": 40,
+    "maxFov": 75,
+    "defaultZoomLvl": 50,
+    "defaultYaw": 0,
+    "defaultPitch": 0,
+    "sphereCorrection": {},
+    "photos": [
+      {
+        "file": "secondbed_photo2.jpg",
+        "label": "实拍1"
+      }
+    ]
+  },
+  {
+    "id": "bathroom",
+    "title": "厕所",
+    "meta": "360° 全景漫游",
+    "badge": "360°",
+    "file": "bathroom.jpg",
+    "levels": {
+      "thumb": "bathroom_thumb.jpg",
+      "mobile": "bathroom_mobile.jpg",
+      "full": "bathroom.jpg"
     },
     "minFov": 40,
     "maxFov": 75,

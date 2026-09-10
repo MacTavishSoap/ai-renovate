@@ -5,7 +5,9 @@ import { Viewer } from '@photo-sphere-viewer/core'
 import '@photo-sphere-viewer/core/index.css'
 import {
   loadManifest, getPanoById, pickInitialLevel, getPanoUrl,
-  getThumbUrl, getEffectUrl, getFloorplanUrl, isMobileDevice
+  getThumbUrl, getPhotos, getPhotoUrl, getPhotoThumbUrl,
+  getEffects, getEffectItemUrl, getEffectItemThumbUrl,
+  isMobileDevice
 } from '@/api/pano'
 
 const route = useRoute()
@@ -29,16 +31,21 @@ const uiVisible = ref(true)
 const interacted = ref(false)
 const showHint = ref(true)
 
-// --- Side panel (效果图 / 户型图) ---
-const sidePanel = ref(null) // null | 'effect' | 'floorplan'
+// --- Side panel (实拍图 / 3D效果图) ---
+const sidePanel = ref(null) // null | 'photos' | 'effects'
 
 const isMobile = isMobileDevice()
 const hasMultipleLevels = computed(() =>
   currentPano.value?.levels?.mobile && currentPano.value?.levels?.full
 )
 const hasScenes = computed(() => list.value.length > 1)
-const hasEffect = computed(() => !!currentPano.value?.effectImage)
-const hasFloorplan = computed(() => !!currentPano.value?.floorplan)
+const photosList = computed(() => getPhotos(currentPano.value || {}))
+const effectsList = computed(() => getEffects(currentPano.value || {}))
+const hasPhotos = computed(() => photosList.value.length > 0)
+const hasEffects = computed(() => effectsList.value.length > 0)
+const hasSideContent = computed(() => hasPhotos.value || hasEffects.value)
+// 当前选中查看的图片 (放大的)
+const activeImage = ref(null) // { url, label }
 
 // --- Idle UI auto-hide ---
 let idleTimer = null
@@ -165,10 +172,15 @@ function switchLevel(level) {
 // --- Side panel ---
 function openPanel(type) {
   sidePanel.value = type
+  activeImage.value = null
 }
 function closePanel() {
   sidePanel.value = null
+  activeImage.value = null
   resetIdle()
+}
+function showImage(url, label) {
+  activeImage.value = { url, label }
 }
 
 // --- Navigation ---
@@ -228,8 +240,26 @@ onBeforeUnmount(() => {
   }
 })
 
+// --- 阻止浏览器默认手势 (双指缩放/旋转) ---
 function preventGesture(e) { e.preventDefault() }
-document.addEventListener('gesturestart', preventGesture, { passive: false })
+
+// --- 阻止 touchmove 的页面滚动/pull-to-refresh ---
+// touch-action:none 已在 CSS 层面声明，但部分安卓浏览器仍会触发
+// touchmove 的默认行为，必须在 JS 层面也阻止
+function preventTouchMove(e) {
+  // 只阻止单指拖动（PSV 需要的），双指缩放交给浏览器
+  if (e.touches.length === 1) e.preventDefault()
+}
+
+onMounted(() => {
+  document.addEventListener('gesturestart', preventGesture, { passive: false })
+  document.addEventListener('touchmove', preventTouchMove, { passive: false })
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('gesturestart', preventGesture)
+  document.removeEventListener('touchmove', preventTouchMove)
+})
 </script>
 
 <template>
@@ -268,42 +298,59 @@ document.addEventListener('gesturestart', preventGesture, { passive: false })
       </button>
     </header>
 
-    <!-- Right-side tools (效果图 / 户型图) -->
-    <div v-if="hasEffect || hasFloorplan" class="side-tools">
-      <button v-if="hasEffect" class="side-btn" :class="{ active: sidePanel === 'effect' }" @click="sidePanel === 'effect' ? closePanel() : openPanel('effect')" aria-label="效果图">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></svg>
-        <span class="side-label">效果图</span>
+    <!-- Right-side tools (实拍图 / 3D效果图) -->
+    <div v-if="hasSideContent" class="side-tools">
+      <button v-if="hasPhotos" class="side-btn" :class="{ active: sidePanel === 'photos' }" @click="sidePanel === 'photos' ? closePanel() : openPanel('photos')" aria-label="实拍图">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+        <span class="side-label">实拍</span>
       </button>
-      <button v-if="hasFloorplan" class="side-btn" :class="{ active: sidePanel === 'floorplan' }" @click="sidePanel === 'floorplan' ? closePanel() : openPanel('floorplan')" aria-label="户型图">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9h18M9 21V9M21 9v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9" /><path d="M3 9V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4" /></svg>
-        <span class="side-label">户型图</span>
+      <button v-if="hasEffects" class="side-btn" :class="{ active: sidePanel === 'effects' }" @click="sidePanel === 'effects' ? closePanel() : openPanel('effects')" aria-label="3D效果图">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></svg>
+        <span class="side-label">3D</span>
       </button>
     </div>
 
-    <!-- Side panel (slide-in) -->
-    <Transition name="slide-panel">
+    <!-- Side panel (slide-in, 网格列表) -->
+    <Transition :name="isMobile ? 'sheet-panel' : 'slide-panel'">
       <aside v-if="sidePanel" class="side-panel">
         <header class="panel-header">
-          <span>{{ sidePanel === 'effect' ? '效果图' : '户型图' }}</span>
+          <span>{{ sidePanel === 'photos' ? '实拍图' : '3D 效果图' }}</span>
           <button class="icon-btn small" @click="closePanel" aria-label="关闭">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </header>
         <div class="panel-body">
-          <img
-            v-if="sidePanel === 'effect' && currentPano?.effectImage"
-            :src="getEffectUrl(currentPano)"
-            alt="效果图"
-            class="panel-img"
-          />
-          <img
-            v-if="sidePanel === 'floorplan' && currentPano?.floorplan"
-            :src="getFloorplanUrl(currentPano)"
-            alt="户型图"
-            class="panel-img"
-          />
+          <!-- 网格列表 -->
+          <div class="img-grid">
+            <button
+              v-for="item in (sidePanel === 'photos' ? photosList : effectsList)"
+              :key="item.file"
+              class="grid-item"
+              @click="showImage(sidePanel === 'photos' ? getPhotoUrl(item.file) : getEffectItemUrl(item.file), item.label)"
+            >
+              <img
+                :src="sidePanel === 'photos' ? getPhotoThumbUrl(item.file) : getEffectItemThumbUrl(item.file)"
+                :alt="item.label"
+                loading="lazy"
+              />
+              <span class="grid-label">{{ item.label }}</span>
+            </button>
+          </div>
         </div>
       </aside>
+    </Transition>
+
+    <!-- 全屏图片查看器 -->
+    <Transition name="fade">
+      <div v-if="activeImage" class="photo-overlay" @click="activeImage = null">
+        <div class="photo-overlay-bar">
+          <button class="icon-btn small" @click.stop="activeImage = null" aria-label="关闭">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+          <span class="photo-overlay-label">{{ activeImage.label }}</span>
+        </div>
+        <img :src="activeImage.url" :alt="activeImage.label" class="photo-full" @click.stop />
+      </div>
     </Transition>
 
     <!-- Drag hint -->
@@ -339,9 +386,16 @@ document.addEventListener('gesturestart', preventGesture, { passive: false })
 
 <style scoped>
 .viewer-page {
-  position: fixed; inset: 0; background: #0A0A0C; overflow: hidden; touch-action: none;
+  position: fixed; inset: 0; background: #0A0A0C; overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none; /* 禁止 pull-to-refresh */
+  -webkit-overflow-scrolling: auto; /* 关闭惯性滚动 */
 }
-.psv-container { width: 100%; height: 100%; touch-action: none; }
+.psv-container {
+  width: 100%; height: 100%;
+  touch-action: none;
+  overscroll-behavior: none;
+}
 
 /* --- Overlays --- */
 .overlay {
@@ -399,7 +453,8 @@ document.addEventListener('gesturestart', preventGesture, { passive: false })
   display: flex; flex-direction: column; gap: var(--space-sm);
   transition: opacity var(--duration-slow) var(--ease-out), transform var(--duration-slow) var(--ease-out);
 }
-.ui-hidden .side-tools { opacity: 0; transform: translateY(-50%) translateX(120%); pointer-events: none; }
+/* 侧边工具按钮始终可见可点击，不随 ui-hidden 隐藏 */
+.ui-hidden .side-tools { opacity: 0.5; }
 
 .side-btn {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -417,7 +472,7 @@ document.addEventListener('gesturestart', preventGesture, { passive: false })
 /* --- Side panel --- */
 .side-panel {
   position: absolute; right: 0; top: 0; bottom: 0; z-index: 40;
-  width: min(420px, 85vw); background: rgba(14, 14, 16, 0.96);
+  width: min(300px, 70vw); background: rgba(14, 14, 16, 0.96);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   display: flex; flex-direction: column;
   box-shadow: -8px 0 32px rgba(0,0,0,0.4);
@@ -431,11 +486,71 @@ document.addEventListener('gesturestart', preventGesture, { passive: false })
 }
 .panel-body {
   flex: 1; overflow-y: auto; padding: var(--space-md);
-  display: flex; align-items: flex-start; justify-content: center;
 }
-.panel-img {
-  width: 100%; border-radius: var(--radius-md);
-  border: 1px solid var(--dark-border);
+
+/* --- 图片网格 --- */
+.img-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);
+}
+.grid-item {
+  border: none; padding: 0; cursor: pointer; background: none;
+  border-radius: var(--radius-md); overflow: hidden;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.grid-item:active { transform: scale(0.96); }
+.grid-item img {
+  width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block;
+}
+.grid-label {
+  display: block; padding: 6px 4px; text-align: center;
+  font-size: 11px; color: rgba(255,255,255,0.6);
+}
+
+/* --- 全屏图片查看器 --- */
+.photo-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.92);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+}
+.photo-overlay-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: var(--space-sm);
+  padding: calc(var(--space-sm) + env(safe-area-inset-top, 0px)) var(--space-md);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+  z-index: 1;
+}
+.photo-overlay-label {
+  color: #fff; font-size: var(--text-caption); font-weight: 500;
+}
+.photo-full {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* --- 手机端: 面板从底部弹出 --- */
+@media (max-width: 600px) {
+  .side-panel {
+    right: 0; left: 0; top: auto; bottom: 0;
+    width: 100%; max-height: 50vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
+  }
+  .img-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- 底部 sheet 动画 --- */
+.sheet-panel-enter-active, .sheet-panel-leave-active {
+  transition: transform var(--dur-normal) var(--ease-out);
+}
+.sheet-panel-enter-from, .sheet-panel-leave-to {
+  transform: translateY(100%);
+}
+.sheet-panel-enter-to, .sheet-panel-leave-from {
+  transform: translateY(0);
 }
 
 /* --- Drag hint --- */
@@ -482,7 +597,8 @@ document.addEventListener('gesturestart', preventGesture, { passive: false })
   background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
   transition: opacity var(--duration-slow) var(--ease-out), transform var(--duration-slow) var(--ease-out);
 }
-.ui-hidden .scene-strip { opacity: 0; transform: translateY(100%); pointer-events: none; }
+/* 场景切换栏始终可见可点击 */
+.ui-hidden .scene-strip { opacity: 0.5; }
 .scene-scroll {
   display: flex; gap: var(--space-sm); overflow-x: auto; overflow-y: hidden;
   scroll-snap-type: x mandatory; scrollbar-width: none; -ms-overflow-style: none;
