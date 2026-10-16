@@ -1,6 +1,8 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from './views/Home.vue'
+import LoginView from './views/admin/LoginView.vue'
 import AdminLayout from './views/admin/AdminLayout.vue'
+import { authed } from './admin/auth'
 import AssetsView from './views/admin/AssetsView.vue'
 import StaffView from './views/admin/StaffView.vue'
 import PermissionsView from './views/admin/PermissionsView.vue'
@@ -13,6 +15,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: Home },
+    { path: '/login', component: LoginView, meta: { title: '登录' } },
     {
       path: '/admin',
       component: AdminLayout,
@@ -39,6 +42,13 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0, behavior: 'instant' }),
+})
+
+router.beforeEach((to) => {
+  if (to.path.startsWith('/admin') && !authed.value) {
+    return { path: '/login', query: { to: to.fullPath } }
+  }
+  if (to.path === '/login' && authed.value) return '/admin/assets'
 })
 
 router.afterEach((to) => {

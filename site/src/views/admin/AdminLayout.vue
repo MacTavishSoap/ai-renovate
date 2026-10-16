@@ -1,11 +1,18 @@
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '../../components/admin/Icon.vue'
+import { logout } from '../../admin/auth'
 import { CAPS, can, canCount, me, meId, staff, toasts } from '../../admin/store'
 
 const route = useRoute()
+const router = useRouter()
 const meta = computed(() => route.meta)
+
+function exit() {
+  logout()
+  router.replace('/login')
+}
 
 const nav = computed(() => [
   { to: '/admin/assets', no: '01', label: '资产合集' },
@@ -36,7 +43,10 @@ const nav = computed(() => [
         <p class="ad-me__can">可用功能 <b>{{ canCount }}</b> / {{ CAPS.length }}</p>
       </div>
 
-      <RouterLink to="/" class="ad-back">← 返回官网</RouterLink>
+      <div class="ad-side__exit">
+        <button type="button" class="ad-back" @click="exit">退出</button>
+        <RouterLink to="/" class="ad-back">← 返回官网</RouterLink>
+      </div>
     </aside>
 
     <div class="ad-main">
