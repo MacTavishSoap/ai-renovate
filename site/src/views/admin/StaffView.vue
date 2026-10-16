@@ -3,29 +3,18 @@ import { computed, ref } from 'vue'
 import Switch from '../../components/admin/Switch.vue'
 import Modal from '../../components/admin/Modal.vue'
 import Icon from '../../components/admin/Icon.vue'
-import { addStaff, customers, me, perms, ROLES, staff, toast } from '../../admin/store'
+import { addStaff, customers, me, ROLES, staff, studioState, toast } from '../../admin/store'
 
 const isAdmin = computed(() => me.value.role === '管理员')
-
-const stats = computed(() => [
-  { k: '员工总数', v: staff.length },
-  { k: '可使用功能页面', v: staff.filter((s) => state(s).on).length },
-  { k: '累计生图次数', v: staff.reduce((n, s) => n + s.gens, 0) },
-])
-
-function state(s) {
-  if (!perms[s.role]['studio.enter']) return { text: '角色未授权', cls: 'off', on: false }
-  return s.studio ? { text: '可使用', cls: 'on', on: true } : { text: '未开通', cls: 'idle', on: false }
-}
 const owned = (id) => customers.filter((c) => c.ownerId === id).length
 
 function setStudio(s, v) {
   s.studio = v
-  toast(`${s.name} ${v ? '已开通' : '已关闭'}功能页面`)
+  toast(`${s.name}${v ? '已开通' : '已关闭'} AI 生图`)
 }
 function setRole(s, e) {
   s.role = e.target.value
-  toast(`${s.name} 的角色已调整为「${s.role}」`)
+  toast(`${s.name} 已改为「${s.role}」`)
 }
 
 const showAdd = ref(false)
@@ -51,21 +40,17 @@ function submit() {
 
 <template>
   <section>
-    <ul class="ad-stats ad-stats--3">
-      <li v-for="s in stats" :key="s.k"><b>{{ s.v }}</b><span>{{ s.k }}</span></li>
-    </ul>
-
     <div class="ad-bar">
-      <p class="ad-note">功能页面能否使用 = 角色是否授权 × 员工是否单独开通。两者缺一不可。</p>
+      <p class="ad-count">共 <b>{{ staff.length }}</b> 位员工</p>
       <button v-if="isAdmin" type="button" class="ad-btn" @click="openAdd"><Icon name="plus" />添加员工</button>
+      <span v-else class="ad-lock"><Icon name="lock" />仅管理员可修改</span>
     </div>
-    <p v-if="!isAdmin" class="ad-banner"><Icon name="lock" />仅管理员可调整角色与开通状态,当前为只读。</p>
 
     <div class="ad-tablewrap">
       <table class="ad-table">
         <thead>
           <tr>
-            <th>员工</th><th>角色</th><th>功能页面</th><th>开通</th><th class="num">名下客户</th><th class="num">生图次数</th><th>入职</th>
+            <th>员工</th><th>角色</th><th>AI 生图</th><th class="num">名下客户</th><th class="num">已生图</th>
           </tr>
         </thead>
         <tbody>
@@ -79,14 +64,15 @@ function submit() {
                 <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
               </select>
             </td>
-            <td><em class="ad-chip" :class="`ad-chip--${state(s).cls}`">{{ state(s).text }}</em></td>
             <td>
-              <Switch :model-value="s.studio" :label="`${s.name} 开通功能页面`" :disabled="!isAdmin"
-                      @update:model-value="setStudio(s, $event)" />
+              <span class="ad-switchcell">
+                <Switch :model-value="s.studio" :label="`${s.name} 使用 AI 生图`"
+                        :disabled="!isAdmin || studioState(s) === 'role'" @update:model-value="setStudio(s, $event)" />
+                <em :class="`is-${studioState(s)}`">{{ { on: '已开通', off: '未开通', role: '该角色未授权' }[studioState(s)] }}</em>
+              </span>
             </td>
             <td class="num">{{ owned(s.id) }}</td>
             <td class="num">{{ s.gens }}</td>
-            <td class="muted">{{ s.joined }}</td>
           </tr>
         </tbody>
       </table>

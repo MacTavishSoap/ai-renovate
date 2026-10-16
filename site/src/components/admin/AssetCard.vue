@@ -1,31 +1,28 @@
 <script setup>
 import { computed } from 'vue'
-import SceneThumb from './SceneThumb.vue'
 import Icon from './Icon.vue'
-import { current, customerLabel, customerOf, fmt } from '../../admin/store'
+import { coverUrl, current, customerLabel, customerOf, fmtDay, lookFilter } from '../../admin/store'
 
-const props = defineProps({ asset: { type: Object, required: true }, publicView: Boolean })
+const props = defineProps({ asset: { type: Object, required: true }, visitor: Boolean })
 defineEmits(['open'])
 
 const cur = computed(() => current(props.asset))
-const label = computed(() => customerLabel(props.asset, props.publicView))
-const masked = computed(() => props.publicView && !!customerOf(props.asset)?.private)
+const label = computed(() => customerLabel(props.asset, props.visitor))
+const hidden = computed(() => props.visitor && !!customerOf(props.asset)?.private)
 </script>
 
 <template>
   <button type="button" class="ad-card" @click="$emit('open', asset)">
     <span class="ad-card__shot">
-      <SceneThumb :scene="cur.scene" />
-      <span class="ad-card__ver">v{{ cur.n }}</span>
-      <span class="ad-card__tag">{{ asset.visibility === 'public' ? '公共演示' : '私人' }}</span>
+      <img :src="coverUrl(asset)" :alt="asset.name" loading="lazy" :style="{ filter: lookFilter(cur.looks) }" />
+      <span class="ad-card__ver">第 {{ cur.n }} 版</span>
+      <span class="ad-card__go">查看详情</span>
     </span>
     <span class="ad-card__body">
       <span class="ad-card__name">{{ asset.name }}</span>
       <span class="ad-card__meta">
-        <span class="ad-card__cust" :class="{ 'is-masked': masked }">
-          <Icon v-if="masked" name="lock" />{{ label }}
-        </span>
-        <span>{{ fmt(cur.at) }}</span>
+        <span class="ad-card__cust" :class="{ 'is-hidden': hidden }"><Icon v-if="hidden" name="lock" />{{ label }}</span>
+        <span>{{ fmtDay(cur.at) }}</span>
       </span>
     </span>
   </button>

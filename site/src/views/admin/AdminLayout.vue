@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '../../components/admin/Icon.vue'
-import { can, me, meId, perms, staff, toasts } from '../../admin/store'
+import { CAPS, can, canCount, me, meId, staff, toasts } from '../../admin/store'
 
 const route = useRoute()
 const meta = computed(() => route.meta)
@@ -11,16 +11,14 @@ const nav = computed(() => [
   { to: '/admin/assets', no: '01', label: '资产合集' },
   { to: '/admin/staff', no: '02', label: '员工列表' },
   { to: '/admin/permissions', no: '03', label: '权限管理' },
-  { to: '/admin/studio', no: '04', label: '生图工坊', locked: !can('studio.enter') },
+  { to: '/admin/studio', no: '04', label: 'AI 生图', locked: !can('studio.enter') },
 ])
-
-const caps = computed(() => Object.values(perms[me.value.role]).filter(Boolean).length)
 </script>
 
 <template>
   <div class="ad">
     <aside class="ad-side">
-      <RouterLink to="/" class="ad-brand" aria-label="返回官网">FORTUNE<small>WORKSPACE · 员工工作台</small></RouterLink>
+      <RouterLink to="/" class="ad-brand" aria-label="返回官网">FORTUNE<small>员工工作台</small></RouterLink>
 
       <nav class="ad-nav" aria-label="工作台导航">
         <RouterLink v-for="n in nav" :key="n.to" :to="n.to" class="ad-nav__a">
@@ -31,11 +29,11 @@ const caps = computed(() => Object.values(perms[me.value.role]).filter(Boolean).
       </nav>
 
       <div class="ad-me">
-        <p class="ad-label">当前身份 · 演示切换</p>
-        <select v-model.number="meId" class="ad-select" aria-label="切换当前身份">
+        <p class="ad-label">演示 · 切换身份</p>
+        <select v-model.number="meId" class="ad-select" aria-label="切换身份">
           <option v-for="s in staff" :key="s.id" :value="s.id">{{ s.name }} · {{ s.role }}</option>
         </select>
-        <p class="ad-hint">{{ me.role }} · 已授权 {{ caps }} 项能力。切换身份可直接看到按钮与页面如何随权限变化。</p>
+        <p class="ad-me__can">可用功能 <b>{{ canCount }}</b> / {{ CAPS.length }}</p>
       </div>
 
       <RouterLink to="/" class="ad-back">← 返回官网</RouterLink>

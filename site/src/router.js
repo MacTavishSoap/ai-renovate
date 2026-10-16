@@ -20,19 +20,19 @@ const router = createRouter({
       children: [
         {
           path: 'assets', component: AssetsView,
-          meta: { no: '01', en: 'ASSETS', title: '资产合集', desc: '私人客户资产与公共演示资产统一管理。每件资产都可以多次编辑,并回溯到任意历史版本。' },
+          meta: { no: '01', en: 'ASSETS', title: '资产合集', desc: 'AI 生成的效果图,归谁、谁能看,一目了然' },
         },
         {
           path: 'staff', component: StaffView,
-          meta: { no: '02', en: 'STAFF', title: '员工列表', desc: '员工账号、角色,以及单独开通的功能页面入口。' },
+          meta: { no: '02', en: 'STAFF', title: '员工列表', desc: '谁能使用 AI 生图,在这里开关' },
         },
         {
           path: 'permissions', component: PermissionsView,
-          meta: { no: '03', en: 'PERMISSIONS', title: '权限管理', desc: '按角色配置功能页面、资产与客户的使用范围,业务人员的权限在这里统一管理。' },
+          meta: { no: '03', en: 'PERMISSIONS', title: '权限管理', desc: '每个角色能做什么,打开或关闭即可' },
         },
         {
           path: 'studio', component: StudioView,
-          meta: { no: '04', en: 'STUDIO', title: '生图工坊', desc: '基于生图的功能页面入口,目前为占位。' },
+          meta: { no: '04', en: 'AI STUDIO', title: 'AI 生图', desc: '从户型图到 3D 效果图,一站完成' },
         },
       ],
     },

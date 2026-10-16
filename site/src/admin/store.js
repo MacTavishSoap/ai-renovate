@@ -1,21 +1,34 @@
 import { computed, reactive, ref } from 'vue'
-import { baseScene, EDITS } from './scene'
+import { getEffectItemThumbUrl, getThumbUrl } from '@frontend/api/pano'
 
 /* ---------------------------------------------------------
    演示数据层:全部是内存里的假数据,刷新即重置。
-   接真实后端时,只需要把这里的 reactive 数组换成接口请求。
+   画面用的是项目里真实的全景图 / 3D 户型图(frontend/public/panoramas)。
+   "再次编辑"目前用光影效果来模拟,接真实生图后,只需把每个版本换成生图结果。
    --------------------------------------------------------- */
 
+/* ---------- 光影效果(每次"再次编辑"可叠加) ---------- */
+export const LOOKS = {
+  warm: { label: '暖光', css: 'sepia(.28) saturate(1.18) brightness(1.04)' },
+  cool: { label: '冷调', css: 'hue-rotate(-16deg) saturate(.9) brightness(1.03)' },
+  bright: { label: '提亮', css: 'brightness(1.16) contrast(.96)' },
+  soft: { label: '柔和', css: 'contrast(.9) saturate(.82) brightness(1.06)' },
+  rich: { label: '浓郁', css: 'contrast(1.12) saturate(1.32)' },
+  dusk: { label: '黄昏', css: 'sepia(.45) saturate(1.3) brightness(.86) hue-rotate(-8deg)' },
+}
+export const lookFilter = (keys) => keys.map((k) => LOOKS[k].css).join(' ') || 'none'
+
+/* ---------- 角色与权限 ---------- */
 export const ROLES = ['管理员', '设计师', '业务人员']
 
 export const CAPS = [
-  { key: 'studio.enter', group: '功能页面', label: '进入功能页面', hint: '生图工坊入口,另需在员工列表里单独开通' },
-  { key: 'studio.generate', group: '功能页面', label: '发起生图 / 再次编辑', hint: '基于生图产出新的 3D 版本' },
-  { key: 'asset.viewAll', group: '资产', label: '查看全部客户资产', hint: '关闭后只能看到本人名下的私人资产' },
-  { key: 'asset.rollback', group: '资产', label: '回溯历史版本', hint: '把资产恢复到任意一个旧版本' },
-  { key: 'asset.publicize', group: '资产', label: '公共化 / 私人化', hint: '在私人客户资产与公共演示资产之间转换' },
-  { key: 'customer.add', group: '客户', label: '加入所属客户', hint: '为资产指定或新增所属客户' },
-  { key: 'customer.privacy', group: '客户', label: '设置客户隐私化', hint: '公共展示时隐藏客户姓名' },
+  { key: 'studio.enter', group: 'AI 生图', label: '使用 AI 生图页面' },
+  { key: 'studio.generate', group: 'AI 生图', label: '发起生图 / 再次修改' },
+  { key: 'asset.viewAll', group: '资产', label: '查看所有客户的资产' },
+  { key: 'asset.rollback', group: '资产', label: '恢复到历史版本' },
+  { key: 'asset.publicize', group: '资产', label: '切换「客户专属 / 对外展示」' },
+  { key: 'customer.add', group: '客户', label: '添加客户、指定归属' },
+  { key: 'customer.privacy', group: '客户', label: '隐藏客户真实姓名' },
 ]
 
 export const perms = reactive({
@@ -32,13 +45,13 @@ export const perms = reactive({
 
 /* ---------- 员工 ---------- */
 export const staff = reactive([
-  { id: 1, name: '张霁', role: '管理员', studio: true, joined: '2022-03', gens: 312 },
-  { id: 2, name: '林初', role: '设计师', studio: true, joined: '2023-01', gens: 486 },
-  { id: 3, name: '周岚', role: '设计师', studio: true, joined: '2023-07', gens: 358 },
-  { id: 4, name: '陈默', role: '业务人员', studio: true, joined: '2024-02', gens: 141 },
-  { id: 5, name: '李敏', role: '业务人员', studio: true, joined: '2024-05', gens: 96 },
-  { id: 6, name: '赵安', role: '业务人员', studio: false, joined: '2025-01', gens: 0 },
-  { id: 7, name: '吴桐', role: '设计师', studio: true, joined: '2025-04', gens: 207 },
+  { id: 1, name: '张霁', role: '管理员', studio: true, gens: 312 },
+  { id: 2, name: '林初', role: '设计师', studio: true, gens: 486 },
+  { id: 3, name: '周岚', role: '设计师', studio: true, gens: 358 },
+  { id: 4, name: '陈默', role: '业务人员', studio: true, gens: 141 },
+  { id: 5, name: '李敏', role: '业务人员', studio: true, gens: 96 },
+  { id: 6, name: '赵安', role: '业务人员', studio: false, gens: 0 },
+  { id: 7, name: '吴桐', role: '设计师', studio: true, gens: 207 },
 ])
 
 export const meId = ref(1)
@@ -49,10 +62,17 @@ export function can(key) {
   const on = !!perms[me.value.role]?.[key]
   return key === 'studio.enter' ? on && me.value.studio : on
 }
+export const canCount = computed(() => CAPS.filter((c) => can(c.key)).length)
+
+/** 员工能否使用 AI 生图:角色授权 且 本人已开通 */
+export const studioState = (s) => {
+  if (!perms[s.role]['studio.enter']) return 'role'
+  return s.studio ? 'on' : 'off'
+}
 
 export function addStaff(name, role) {
   const id = Math.max(...staff.map((s) => s.id)) + 1
-  staff.push({ id, name, role, studio: role !== '业务人员', joined: '2026-10', gens: 0 })
+  staff.push({ id, name, role, studio: role !== '业务人员', gens: 0 })
 }
 
 /* ---------- 客户 ---------- */
@@ -84,48 +104,45 @@ export function setCustomerPrivacy(id, value) {
 /* ---------- 资产与版本 ---------- */
 const H = 3600e3
 const NOW = Date.UTC(2026, 9, 16, 2, 0)
-const DESIGNERS = [2, 3, 7]
 
-// [项目, 空间, 色调, 构图, 可见性, 客户id, 业务员id, 版本数, 回溯到第几版(可选)]
+// kind 'pano' = 全景效果图(Photo Sphere Viewer);'plan' = 3D 户型图(多角度)
+export const ROOMS = { livingroom: '客厅', bedroom: '主卧', children: '儿童房', secondbed: '次卧', bathroom: '卫生间' }
+
+// [名称, 类型, 全景编号, 去向, 客户id, 业务员id, 每一版的效果组合[], 回溯到第几版(可选)]
 const SEED = [
-  ['云栖壹号', '客厅', 0, 0, 'private', 1, 4, 4],
-  ['云栖壹号', '主卧', 1, 1, 'private', 1, 4, 3],
-  ['木隐', '书房', 1, 1, 'private', 2, 4, 2],
-  ['岩境', '餐厨', 2, 2, 'private', 3, 5, 4, 2],
-  ['岩境', '客厅', 3, 3, 'private', 3, 5, 3],
-  ['静庐', '茶室', 3, 3, 'private', 4, 5, 2],
-  ['澜庭', '玄关', 4, 4, 'private', 6, 6, 2],
-  ['听松', '露台', 7, 0, 'private', 7, 2, 3],
-  ['山海间', '主卧', 5, 1, 'private', 9, 3, 4],
-  ['云栖壹号', '客厅 · 方案 B', 0, 0, 'public', 2, 4, 3],
-  ['样板 · 现代轻奢', '客厅', 6, 0, 'public', null, 2, 4],
-  ['样板 · 原木格栅', '卧室', 1, 1, 'public', 5, 4, 2],
-  ['样板 · 石材与黄铜', '餐厨', 2, 2, 'public', null, 3, 3],
-  ['澜庭', '客厅', 4, 4, 'public', 6, 6, 3],
-  ['岩境', '书房', 2, 2, 'public', 3, 5, 2],
+  ['云栖壹号 · 客厅', 'pano', 'livingroom', 'private', 1, 4, [[], ['warm'], ['warm', 'bright'], ['cool']]],
+  ['云栖壹号 · 主卧', 'pano', 'bedroom', 'private', 1, 4, [[], ['soft'], ['soft', 'warm']]],
+  ['云栖壹号 · 3D 户型图', 'plan', null, 'private', 1, 4, [[], ['bright']]],
+  ['木隐 · 儿童房', 'pano', 'children', 'private', 2, 4, [[], ['rich']]],
+  ['岩境 · 客厅', 'pano', 'livingroom', 'private', 3, 5, [[], ['dusk'], ['dusk', 'bright'], ['soft']], 2],
+  ['岩境 · 次卧', 'pano', 'secondbed', 'private', 3, 5, [[], ['warm'], ['warm', 'soft']]],
+  ['静庐 · 卫生间', 'pano', 'bathroom', 'private', 4, 5, [[], ['cool']]],
+  ['澜庭 · 主卧', 'pano', 'bedroom', 'private', 6, 6, [[], ['bright']]],
+  ['听松 · 3D 户型图', 'plan', null, 'private', 7, 2, [[], ['rich'], ['rich', 'warm']]],
+  ['山海间 · 客厅', 'pano', 'livingroom', 'private', 9, 3, [[], ['cool'], ['cool', 'bright'], ['soft']]],
+  ['样板间 · 现代简约客厅', 'pano', 'livingroom', 'public', null, 2, [[], ['bright'], ['bright', 'soft'], ['soft']]],
+  ['样板间 · 原木卧室', 'pano', 'bedroom', 'public', 5, 4, [[], ['warm']]],
+  ['样板间 · 三居室 3D 户型图', 'plan', null, 'public', null, 3, [[], ['bright'], ['bright', 'soft']]],
+  ['澜庭 · 儿童房', 'pano', 'children', 'public', 6, 6, [[], ['soft'], ['soft', 'warm']]],
+  ['岩境 · 次卧 方案 B', 'pano', 'secondbed', 'public', 3, 5, [[], ['dusk']]],
 ]
 
-function build(i, [project, room, pal, shape, visibility, customerId, staffId, n, rb]) {
+function build(i, [name, kind, ref, visibility, customerId, staffId, steps, rb]) {
+  const designers = [2, 3, 7]
   const t0 = NOW - (i * 29 + 16) * H
-  let scene = baseScene(pal, shape)
-  const versions = [{ n: 1, note: '初版 · 户型图与风格词生图', scene, by: staffId, from: null, at: t0 }]
-  for (let k = 1; k < n; k++) {
-    const edit = EDITS[(i + k) % EDITS.length]
-    scene = edit.fn(scene)
-    versions.push({
-      n: k + 1,
-      note: edit.note,
-      scene,
-      by: k % 2 ? staffId : DESIGNERS[i % 3],
-      from: k,
-      at: t0 + k * (5 + (i % 4)) * H,
-    })
-  }
+  const versions = steps.map((looks, k) => ({
+    n: k + 1,
+    note: k === 0 ? '初版' : LOOKS[looks[looks.length - 1]].label,
+    looks,
+    by: k % 2 ? designers[i % 3] : staffId,
+    from: k ? k : null,
+    at: t0 + k * (5 + (i % 4)) * H,
+  }))
   if (rb) {
     const src = versions[rb - 1]
-    versions.push({ n: versions.length + 1, note: `回溯至 v${rb}`, scene: { ...src.scene }, by: DESIGNERS[i % 3], from: rb, at: t0 + n * 7 * H })
+    versions.push({ n: versions.length + 1, note: `恢复到第${rb}版`, looks: [...src.looks], by: designers[i % 3], from: rb, at: t0 + steps.length * 7 * H })
   }
-  return { id: `A-${1024 + i}`, name: `${project} · ${room}`, source: `生图 #${1040 + i}`, visibility, customerId, staffId, versions }
+  return { id: `A-${1024 + i}`, name, kind, ref, visibility, customerId, staffId, versions }
 }
 
 export const assets = reactive(SEED.map((row, i) => build(i, row)))
@@ -133,16 +150,22 @@ export const assets = reactive(SEED.map((row, i) => build(i, row)))
 export const current = (a) => a.versions[a.versions.length - 1]
 export const customerOf = (a) => customers.find((c) => c.id === a.customerId) ?? null
 
-// 仅可见:公共资产所有人可见;私人资产需要"查看全部"权限,否则只看本人名下
+/** 缩略图(沿用项目 api/pano.js 的地址规则) */
+export const coverUrl = (a) =>
+  a.kind === 'plan'
+    ? getEffectItemThumbUrl('effect_front.jpg')
+    : getThumbUrl({ file: `${a.ref}.jpg`, levels: { thumb: `${a.ref}_thumb.jpg` } })
+
+// 公共资产所有人可见;私人资产需要"查看所有客户的资产"权限,否则只看本人名下
 export const visibleAssets = computed(() =>
   assets.filter((a) => a.visibility === 'public' || can('asset.viewAll') || a.staffId === me.value.id),
 )
 
-/** 资产卡片上显示的客户名。公共视图下,被隐私化的客户显示为 王** */
-export function customerLabel(a, publicView) {
+/** 资产卡片上显示的客户名。访客视角下,隐藏姓名的客户显示为 王** */
+export function customerLabel(a, visitor) {
   const c = customerOf(a)
-  if (!c) return publicView || a.visibility === 'public' ? '演示样板' : '未指定客户'
-  return publicView && c.private ? maskName(c.name) : c.name
+  if (!c) return a.visibility === 'public' ? '样板展示' : '未指定客户'
+  return visitor && c.private ? maskName(c.name) : c.name
 }
 
 export function setVisibility(a, v) {
@@ -153,14 +176,21 @@ export function assignCustomer(a, id) {
   a.customerId = id || null
 }
 
-export function addVersion(a, note, scene, from) {
-  a.versions.push({ n: a.versions.length + 1, note, scene, by: me.value.id, from, at: Date.now() })
+export function addVersion(a, note, looks, from) {
+  a.versions.push({ n: a.versions.length + 1, note, looks, by: me.value.id, from, at: Date.now() })
   const m = staff.find((s) => s.id === me.value.id)
   if (m) m.gens += 1
 }
 
+/** 在某一版的基础上叠加一种效果,生成新的一版 */
+export function applyLook(a, base, key) {
+  const looks = [...base.looks.filter((k) => k !== key), key].slice(-3)
+  addVersion(a, LOOKS[key].label, looks, base.n)
+}
+
+/** 恢复到旧版本:不删除任何历史,而是复制它成为最新一版 */
 export function rollbackTo(a, ver) {
-  addVersion(a, `回溯至 v${ver.n}`, { ...ver.scene }, ver.n)
+  addVersion(a, `恢复到第${ver.n}版`, [...ver.looks], ver.n)
 }
 
 /* ---------- 工具 ---------- */
@@ -168,6 +198,10 @@ const p2 = (n) => String(n).padStart(2, '0')
 export const fmt = (t) => {
   const d = new Date(t)
   return `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`
+}
+export const fmtDay = (t) => {
+  const d = new Date(t)
+  return `${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
 }
 
 export const toasts = ref([])
