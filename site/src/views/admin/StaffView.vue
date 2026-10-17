@@ -50,7 +50,7 @@ function submit() {
       <table class="ad-table">
         <thead>
           <tr>
-            <th>员工</th><th>角色</th><th>AI 生图</th><th class="num">名下客户</th><th class="num">已生图</th>
+            <th>员工</th><th>角色</th><th>ai渲染</th><th class="num">名下客户</th><th class="num">已生图</th>
           </tr>
         </thead>
         <tbody>

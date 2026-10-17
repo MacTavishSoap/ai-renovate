@@ -22,8 +22,8 @@ export const lookFilter = (keys) => keys.map((k) => LOOKS[k].css).join(' ') || '
 export const ROLES = ['管理员', '设计师', '业务人员']
 
 export const CAPS = [
-  { key: 'studio.enter', group: 'AI 生图', label: '使用 AI 生图页面' },
-  { key: 'studio.generate', group: 'AI 生图', label: '发起生图 / 再次修改' },
+  { key: 'studio.enter', group: 'ai渲染', label: '使用 ai渲染页面' },
+  { key: 'studio.generate', group: 'ai渲染', label: '发起生图 / 再次修改' },
   { key: 'asset.viewAll', group: '资产', label: '查看所有客户的资产' },
   { key: 'asset.rollback', group: '资产', label: '恢复到历史版本' },
   { key: 'asset.publicize', group: '资产', label: '切换「客户专属 / 对外展示」' },
