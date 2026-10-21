@@ -1,16 +1,242 @@
 ﻿# AI 家装产品 · 技术方案
 
-> **版本**：v5.0 · **日期**：2026-09-07
-> **状态**：demo 已跑通。本版修订：生成全部走托管生图 API（云服务器纯 CPU，无 GPU），一致性靠"结构状态 + 可度量验收"，Docker Compose 部署
-
-> **v6 注记（2026-09-08）**：正式工程落在 `ai-renovate/` 仓库。与本文档的偏差以代码和 `ai-renovate/DECISIONS.md` 为准：
-> Gradio → Vue 3 + Vant 4；全景浏览二期再做（占位 PanoView/photo-sphere-viewer 已精简移除，git 历史可恢复）；不单独开 nginx 容器（frontend 内 nginx 兼任统一入口）；
-> 鉴权 = 邀请码（一店一码一账号）+ JWT（轻量准入，无短信、无 RBAC）；Pydantic AI 保留但只做意图解析编排——
-> 一致性真正的来源是"同一输入图复用 + 结构保持 prompt 后缀 + 二期 M-LSD 几何验收"，不是框架本身。
+> **版本**：v8.0 · **日期**：2026-10-21
+> **状态**：工程进行中。核心交互模式已更新（多点全景图 + 场景图 + 两条路径），生图模型能力评估待实测验证
+>
+> **本版核心变更**：
+> - 引入**多点全景图**模式：户型图 → 预设 N 个 Viewpoint → 每个 Viewpoint 一张全景图 → 全景图上可点击生成场景图
+> - 两条路径合并：路径一（户型图驱动）和路径二（纯效果图），共用同一数据结构
+> - 户型图解析**依赖生图模型能力**，减少预处理：OpenCV 做必要清洗，结构理解交给模型
+> - 视角点**预置隔离**：每个全景图对应一个物理位置，天然避免跨房间穿帮
+> - 全景图**固定机位，不可漫游**：用户通过点击全景图上的预设位置查看各角度场景图
 
 ---
 
-## 一、产品定义
+## 一·一、核心交互模式
+
+### 两条路径
+
+| 路径 | 输入 | 流程 | 典型用户 |
+|---|---|---|---|
+| **路径一：户型图驱动** | 户型图（CAD/照片/扫描件） | 解析 → 预设 Viewpoint → 生成全景图 → 点击生成场景图 | 有原始户型图，想看整体规划 |
+| **路径二：纯效果图** | 直接生成效果图 | 连续生成，reference 保证一致性 | 没有户型图，只要效果图 |
+
+### 路径一：多点全景图模式
+
+```
+户型图
+  │
+  ├──→ 解析 RoomState
+  │
+  ├──→ 预设 N 个 Viewpoint（系统预置，可扩展）
+  │       │
+  │       ├── Viewpoint A（客厅门口）→ Panorama A（360°）
+  │       │       ├── ClickableSpot A1 → SceneImage A1（看向沙发）
+  │       │       └── ClickableSpot A2 → SceneImage A2（看向窗户）
+  │       │
+  │       ├── Viewpoint B（主卧床头）→ Panorama B
+  │       │       └── ClickableSpot B1 → SceneImage B1
+  │       │
+  │       └── Viewpoint C（次卧）→ Panorama C
+  │
+  └──→ 用户在全景图上点击 → 弹出该角度场景图（新窗口）
+```
+
+**"小作弊"核心**：每个全景图对应一个物理位置，天然隔离空间范围。客厅全景图的场景图不会"穿帮"到隔壁餐厅。
+
+### 全景图交互
+
+- 全景图 = **固定图片，不可漫游**
+- 全景图上预设 N 个可点击位置
+- 点击 → 弹出该角度的场景图（新窗口/弹窗）
+
+### 两条路径数据一致性
+
+| 层级 | 一致性来源 |
+|---|---|
+| 全景图之间 | 共享 RoomState + 统一 StyleConfig |
+| 全景图 → 场景图 | 场景图生成时传入全景图作为 reference |
+| 场景图之间（同全景图） | 都以同一全景图为锚点 |
+| 跨项目 | 每个 Project 独立 RoomState + StyleConfig |
+
+---
+
+## 一·二、数据结构设计（统一）
+
+### ER 图
+
+```
+User
+  └── Project
+          ├── input_type: 'floor_plan' | 'effect_only'
+          ├── style_prompt / negative_prompt / style_reference
+          │
+          ├── [路径一] RoomState
+          │       ├── walls_json
+          │       ├── rooms_json
+          │       └── openings_json
+          │
+          └── Viewpoint ①
+                  ├── position / direction / label / is_preset
+                  └── Panorama ①
+                          ├── ClickableSpot ①a → SceneImage ①a
+                          ├── ClickableSpot ①b → SceneImage ①b
+                          └── ...
+```
+
+### 数据库表设计
+
+```sql
+-- 1. 项目（顶层实体）
+CREATE TABLE projects (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    input_type TEXT NOT NULL,              -- 'floor_plan' | 'effect_only'
+    style_prompt TEXT,                     -- 风格 prompt
+    negative_prompt TEXT,
+    style_reference_url TEXT,               -- 风格参考图
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 2. 房间结构（路径一有，路径二无）
+CREATE TABLE room_states (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    floor_plan_url TEXT,
+    walls_json TEXT,                        -- [{x1,y1,x2,y2}, ...]
+    rooms_json TEXT,                         -- [{name, polygon, type}, ...]
+    openings_json TEXT,                     -- [{type, position, size}, ...]
+    -- 原始提取产物（可选）
+    depth_map_url TEXT,
+    line_map_url TEXT,
+    camera_params TEXT,                     -- {fov, pitch, roll}
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- 3. 视角点（户型图上的位置）
+CREATE TABLE viewpoints (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    label TEXT NOT NULL,                    -- "客厅门口"、"主卧床头"
+    position_x REAL NOT NULL,                -- 户型图归一化坐标
+    position_y REAL NOT NULL,
+    direction REAL NOT NULL,                 -- 朝向角度（度数）
+    is_preset BOOLEAN DEFAULT FALSE,         -- True=系统预置
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- 4. 全景图（每个 Viewpoint 一张）
+CREATE TABLE panoramas (
+    id INTEGER PRIMARY KEY,
+    viewpoint_id INTEGER NOT NULL,
+    image_url TEXT,
+    width INTEGER,
+    height INTEGER,
+    status TEXT DEFAULT 'pending',          -- 'pending' | 'generating' | 'done' | 'failed'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (viewpoint_id) REFERENCES viewpoints(id)
+);
+
+-- 5. 可点击点和场景图
+CREATE TABLE clickable_spots (
+    id INTEGER PRIMARY KEY,
+    panorama_id INTEGER NOT NULL,
+    position_x REAL NOT NULL,                -- 全景图归一化坐标
+    position_y REAL NOT NULL,
+    direction REAL NOT NULL,
+    label TEXT,                              -- "看向沙发"、"看向窗户"
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (panorama_id) REFERENCES panoramas(id)
+);
+
+CREATE TABLE scene_images (
+    id INTEGER PRIMARY KEY,
+    clickable_spot_id INTEGER,
+    project_id INTEGER NOT NULL,
+    panorama_id INTEGER,                    -- 来源全景图（用于一致性）
+    view_direction REAL NOT NULL,
+    image_url TEXT,
+    status TEXT DEFAULT 'pending',
+    -- 一致性约束快照
+    constraints_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (clickable_spot_id) REFERENCES clickable_spots(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (panorama_id) REFERENCES panoramas(id)
+);
+```
+
+---
+
+## 一·三、户型图解析方案
+
+### 核心思路：依赖生图模型，减少预处理
+
+现代多模态生图模型（如 Seedream、GPT-Image4 等）对图像结构理解能力较强，户型图的**墙体布局、空间关系、门窗位置**可以在 prompt 中直接声明，让模型理解并保持一致。
+
+**减少预处理的好处**：
+- 不用上复杂的 OpenCV 管线（透视矫正、Hough 直线检测、轮廓填充...）
+- 不依赖 PaddleOCR（CPU 负担）
+- 不用自己实现房间类型推断
+
+**需要评估的风险**：
+- 模型对户型图的"结构保持"能力——能不能真的识别并保持墙体线
+- 多次生成时结构一致性如何
+
+### 解析流程（简化版）
+
+```
+户型图上传
+    │
+    ├──→ 必要清洗（可选，按需）
+    │       ├── 尺寸归一化（resize to 1024x1024 或 2048x2048）
+    │       ├── 对比度增强（可选，CAD 图太淡时）
+    │       └── 去背景（白底图直接用，拍照图可能需要）
+    │
+    ├──→ 语义提取（LLM / 规则）
+    │       ├── 房间数量和类型推断（规则：面积+位置）
+    │       └── 标注文字 OCR（轻量：EasyOCR 或 PaddleOCR，备选）
+    │
+    └──→ 输出 RoomState JSON
+            {
+              "walls": [...],
+              "rooms": [...],
+              "openings": [...],
+              "summary": "3室2厅，客厅朝南，主卧带独立卫浴"
+            }
+```
+
+### 待评估项（需要实测）
+
+| 问题 | 评估方法 |
+|---|---|
+| 生图模型能否识别并保持户型图结构？ | 用同一张户型图 + 不同风格 prompt 生成 3 张，叠加对比墙体线重合度 |
+| 多次生成时房间结构一致性？ | 同一 Viewpoint 生成 3 次，评估结构漂移程度 |
+| OCR 房间名称是否必要？ | 先试不带 OCR 的效果，看模型能否正确识别"主卧""客厅" |
+
+### 预处理工具选型（按需，轻量）
+
+| 步骤 | 方案 | 说明 |
+|---|---|---|
+| 尺寸归一化 | PIL resize | 统一到 1024 或 2048 |
+| 对比度增强 | OpenCV `convertScaleAbs` | CAD 图线条太淡时用 |
+| 去背景 | OpenCV `inRange` 白色mask | 拍照图白底时用 |
+| OCR（备选） | EasyOCR | 轻量，Python 包，可选 |
+
+### 远期升级路径
+
+如果实测发现模型对结构保持能力不足，再加回：
+- M-LSD 墙体检测 → 结构线作为 prompt 约束
+- Depth Anything → 深度图作为结构参考
+- 现有的 warp 一致性方案
+
+---
+
+## 二、产品定义
 
 **输入**（二选一）：
 - A. 单视角房间照片 / 白模图 / 户型图
@@ -159,12 +385,63 @@ warp 用的是 state.depth（原图提的那一份），CPU numpy 几十行代�
 |---|---|
 | **自部署 SD / ComfyUI** | 要 GPU 服务器，与"纯 CPU 云服务器 + 全走生图 API"硬冲突；按张付费的 API 更省 |
 | GPU 机型 / nvidia runtime | 没有生成模型要跑，提取模型全 CPU |
-| LangChain / LangGraph | 固定流程不是动态决策，Python 函数够 |
+| LangChain / LangGraph | 固定流程不是动态决策，Python 函数链够；多 agent 互相聊天才用 LangGraph |
 | Celery / Redis | BackgroundTasks + 每用户任务锁够，月活 500+ 再上 |
 | Postgres | SQLite(WAL) 撑到月活万级，升级路径明确 |
 | K8s / 微服务 | 不到那个量级 |
 | Vue/React 后台 | /admin 就一页，不建后台系统 |
-| Pydantic AI（暂缓） | 下拉选风格不需要 LLM 意图解析；做质检/多轮对话时再引入 |
+
+---
+
+## 四·一、Agent 设计决策
+
+### 为什么不是 LangGraph
+
+LangGraph 是为"多 Agent 协作、动态决策、有状态回退"的场景设计的（例如：多个 Agent 互相讨论、分支重试、循环决策）。你的流程本质是**工厂流水线**：
+
+```
+输入 → 结构提取 → 生图 → 质量检查 → 后处理 → 输出
+```
+
+每一步输入输出确定，没有"走哪条路"的动态决策，没有 Agent 间互相调用。LangGraph 的引入只会增加复杂度，不解决问题。
+
+### 用 Pydantic AI 在哪里
+
+**只在两个真正的决策点**：
+
+| 决策点 | 输入 | 决策内容 | 输出 |
+|---|---|---|---|
+| **意图解析** | 用户自由文字 + 风格/房间类型选择 | 用户要什么？生成什么风格的图？ | 结构化参数：房间类型、风格、施工类型、英文 prompt |
+| **质量验收** | 生成的图 + 原始结构 state | 这张图合格吗？ | passed: bool + score: int + issues: list[str] |
+
+其他环节（结构提取、生图、后处理、warp、切片）都是**确定性函数**，不经过 LLM。
+
+### Pipeline 架构
+
+```
+FastAPI 路由（只做分发，不含业务逻辑）
+    │
+    ▼
+GenerationService（事务管理：建任务、扣积分、更新状态）
+    │
+    ▼
+GenerationPipeline（函数链 + Agent 决策点）
+    │
+    ├── step_intent_parse()      ← Pydantic AI Agent（决策）
+    ├── step_structure_extract()  ← Depth Anything + M-LSD（确定性）
+    ├── step_image_generate()     ← 图像生成 API（确定性）
+    ├── step_quality_check()      ← Pydantic AI Agent（决策）
+    └── step_post_process()       ← warp + 超分 + 切片 + 上传（确定性）
+```
+
+### 什么时候需要更多 Agent
+
+如果未来出现以下场景，才考虑增加 Agent：
+- 用户可以在中途干预修改生成参数（Human-in-the-loop）
+- 多张图之间需要互相参考（跨图一致性 Agent）
+- 生成失败后需要模型自己决定怎么重试策略（自我反思 Agent）
+
+目前的固定流水线够用，不要过度设计。
 
 ---
 
